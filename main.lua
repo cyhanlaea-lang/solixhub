@@ -1,16 +1,16 @@
--- Solix Hub - Debug Version
+-- Solix Hub - Fixed Version with Venus UI
 repeat wait() until game:IsLoaded()
 
-print("🔧 Solix Hub Debug Mode Starting...")
+print("🎮 Solix Hub Loading...")
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 local Player = Players.LocalPlayer
 
--- Wait for character properly
+-- Wait for character
 if not Player.Character then
-    print("⏳ Waiting for character...")
     Player.CharacterAdded:Wait()
 end
 
@@ -18,221 +18,259 @@ local Character = Player.Character
 local Humanoid = Character:WaitForChild("Humanoid")
 local RootPart = Character:WaitForChild("HumanoidRootPart")
 
-print("✅ Character loaded successfully")
+print("✅ Game loaded successfully")
 
--- Test if we're in Blox Fruits
-local isBloxFruits = (game.PlaceId == 2753915549 or game.PlaceId == 4442272183 or game.PlaceId == 7449423635)
-print("🎮 Game Check - Blox Fruits: " .. tostring(isBloxFruits))
-print("📋 Current Game ID: " .. game.PlaceId)
-
--- Check for essential Blox Fruits objects
-local essentialObjects = {
-    "Map",
-    "Enemies", 
-    "Live",
-    "SpawnLoca",
-    "_DESPAWNED"
-}
-
-print("🔍 Checking for game objects...")
-for _, objName in pairs(essentialObjects) do
-    local found = Workspace:FindFirstChild(objName)
-    print((found and "✅" or "❌") .. " " .. objName .. ": " .. tostring(found))
-end
-
--- Safe Rayfield Load
-local Rayfield = nil
+-- Load Venus UI (more reliable alternative)
+local Venus = nil
 local success, errorMsg = pcall(function()
-    Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
-    print("✅ Rayfield loaded successfully")
+    Venus = loadstring(game:HttpGet("https://raw.githubusercontent.com/Stefanuk12/Venus/main/Loader.lua"))()
+    print("✅ Venus UI loaded successfully")
 end)
 
-if not success or not Rayfield then
-    print("❌ Rayfield failed to load: " .. tostring(errorMsg))
-    -- Create fallback GUI
-    local FallbackGUI = Instance.new("ScreenGui")
-    FallbackGUI.Parent = game.CoreGui
-    
-    local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.new(0, 400, 0, 300)
-    Frame.Position = UDim2.new(0.5, -200, 0.5, -150)
-    Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    Frame.Parent = FallbackGUI
-    
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, 0, 0.2, 0)
-    Title.Text = "Solix Hub - Rayfield Failed"
-    Title.TextColor3 = Color3.fromRGB(255, 0, 0)
-    Title.BackgroundTransparency = 1
-    Title.Parent = Frame
-    
-    local Status = Instance.new("TextLabel")
-    Status.Size = UDim2.new(1, 0, 0.8, 0)
-    Status.Position = UDim2.new(0, 0, 0.2, 0)
-    Status.Text = "Rayfield UI failed to load.\nError: " .. tostring(errorMsg) .. "\n\nUsing basic mode..."
-    Status.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Status.BackgroundTransparency = 1
-    Status.TextWrapped = true
-    Status.Parent = Frame
-    return
+if not success or not Venus then
+    print("❌ Venus UI failed: " .. tostring(errorMsg))
+    -- Try one more alternative
+    Venus = loadstring(game:HttpGet("https://raw.githubusercontent.com/Stefanuk12/Venus/main/Source.lua"))()
 end
 
--- Create Window with Error Handling
-local Window = nil
-local windowSuccess, windowError = pcall(function()
-    Window = Rayfield:CreateWindow({
-        Name = "Solix Hub - Blox Fruits",
-        LoadingTitle = "Solix Hub Loading...",
-        LoadingSubtitle = "Debug Mode",
-        ConfigurationSaving = {
-            Enabled = true,
-            FolderName = "SolixHub",
-            FileName = "BloxFruitsConfig"
-        },
-        Discord = {
-            Enabled = false,
-        },
-        KeySystem = false,
-    })
-    print("✅ Window created successfully")
-end)
-
-if not windowSuccess or not Window then
-    print("❌ Window creation failed: " .. tostring(windowError))
-    return
-end
-
--- Create Main Tab
-local MainTab = nil
-local tabSuccess, tabError = pcall(function()
-    MainTab = Window:CreateTab("Main", "rbxassetid://4483345998")
-    print("✅ Main tab created")
-end)
-
-if not tabSuccess then
-    print("❌ Main tab failed: " .. tostring(tabError))
-    return
-end
-
--- Create a simple test section first
-local testSection = MainTab:CreateSection("Debug Features")
-
--- Test Button 1
-local testBtn1 = MainTab:CreateButton({
-    Name = "Test Button 1 - Basic Function",
-    Callback = function()
-        print("✅ Test Button 1 Clicked!")
-        Rayfield:Notify({
-            Title = "Test Success",
-            Content = "Basic button is working!",
-            Duration = 3
-        })
-    end,
+-- Create Window
+local Window = Venus:CreateWindow({
+    Title = "Solix Hub - Blox Fruits",
+    Description = "Advanced Multi-Sea Script",
+    LoadingTitle = "Solix Hub",
+    LoadingDescription = "Loading features...",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "SolixHub"
+    }
 })
 
--- Test Button 2 - Check Player Data
-local testBtn2 = MainTab:CreateButton({
-    Name = "Test Button 2 - Check Player Data",
-    Callback = function()
-        print("🔍 Checking player data...")
-        
-        -- Check for player data
-        local dataFound = Player:FindFirstChild("Data")
-        print("Player Data Found: " .. tostring(dataFound))
-        
-        if dataFound then
-            local level = dataFound:FindFirstChild("Level")
-            print("Level Data Found: " .. tostring(level))
-            if level then
-                print("Player Level: " .. tostring(level.Value))
-            end
-        end
-        
-        Rayfield:Notify({
-            Title = "Player Data Check",
-            Content = "Data Found: " .. tostring(dataFound),
-            Duration = 5
-        })
-    end,
-})
+print("✅ Window created")
 
--- Test Toggle
-local testToggle = MainTab:CreateToggle({
-    Name = "Test Toggle - Walk Speed Boost",
-    CurrentValue = false,
+-- Main Tab
+local MainTab = Window:CreateTab("Main", "rbxassetid://4483345998")
+
+-- Auto Farming Section
+local FarmingSection = MainTab:CreateSection("Auto Farming")
+
+local AutoFarmToggle = MainTab:CreateToggle({
+    Title = "Auto Farm Enemies",
+    Default = false,
     Callback = function(Value)
         if Value then
-            Humanoid.WalkSpeed = 50
-            print("✅ Walk speed boosted to 50")
-        else
-            Humanoid.WalkSpeed = 16
-            print("✅ Walk speed reset to 16")
-        end
-    end,
-})
-
--- Try to create farming section
-local farmSectionSuccess, farmSectionError = pcall(function()
-    local FarmingSection = MainTab:CreateSection("Auto Farming")
-    print("✅ Farming section created")
-    
-    local FarmToggle = MainTab:CreateToggle({
-        Name = "Auto Farm (Basic)",
-        CurrentValue = false,
-        Callback = function(Value)
-            if Value then
-                print("🚀 Auto Farm Started")
-                -- Simple farm function
-                spawn(function()
-                    while Value do
-                        wait(1)
-                        print("🔄 Auto Farm Running...")
+            print("🚀 Auto Farm Started")
+            spawn(function()
+                while Value do
+                    wait(1)
+                    -- Basic auto farm logic
+                    local nearest = FindNearestEnemy()
+                    if nearest then
+                        RootPart.CFrame = nearest.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5)
+                        VirtualInputManager:SendKeyEvent(true, "X", false, game)
+                        wait(0.1)
+                        VirtualInputManager:SendKeyEvent(false, "X", false, game)
                     end
-                end)
-            else
-                print("⏹️ Auto Farm Stopped")
-            end
-        end,
-    })
-end)
-
-if not farmSectionSuccess then
-    print("❌ Farming section failed: " .. tostring(farmSectionError))
-end
-
--- Try to create boss section
-local bossSectionSuccess, bossSectionError = pcall(function()
-    local BossSection = MainTab:CreateSection("Boss Farming")
-    
-    local BossDropdown = MainTab:CreateDropdown({
-        Name = "Select Boss",
-        Options = {"Test Boss 1", "Test Boss 2", "Test Boss 3"},
-        CurrentOption = "Select Boss",
-        Callback = function(Option)
-            print("🎯 Selected Boss: " .. Option)
-        end,
-    })
-    
-    print("✅ Boss section created")
-end)
-
-if not bossSectionSuccess then
-    print("❌ Boss section failed: " .. tostring(bossSectionError))
-end
-
--- Final success message
-print("🎉 Solix Hub Debug GUI Loaded Successfully!")
-print("📊 Summary:")
-print("   - Rayfield: ✅")
-print("   - Window: ✅") 
-print("   - Main Tab: ✅")
-print("   - Farming Section: " .. (farmSectionSuccess and "✅" or "❌"))
-print("   - Boss Section: " .. (bossSectionSuccess and "✅" or "❌"))
-
-Rayfield:Notify({
-    Title = "Solix Hub - Debug Mode",
-    Content = "Debug GUI loaded successfully!\nCheck console for details.",
-    Duration = 6,
+                end
+            end)
+        else
+            print("⏹️ Auto Farm Stopped")
+        end
+    end
 })
 
-Rayfield:LoadConfiguration()
+local AutoMeleeToggle = MainTab:CreateToggle({
+    Title = "Auto Melee Attack", 
+    Default = false,
+    Callback = function(Value)
+        print("🥊 Auto Melee: " .. tostring(Value))
+    end
+})
+
+-- Boss Farming Section
+local BossSection = MainTab:CreateSection("Boss Farming")
+
+local BossDropdown = MainTab:CreateDropdown({
+    Title = "Select Boss",
+    Description = "Choose which boss to farm",
+    Options = {
+        "Greybeard",
+        "Saber Expert", 
+        "Dark Beard",
+        "Warden",
+        "Chief Warden"
+    },
+    Default = "Select Boss",
+    Callback = function(Option)
+        print("🎯 Selected Boss: " .. Option)
+    end
+})
+
+local AutoBossToggle = MainTab:CreateToggle({
+    Title = "Auto Boss Farm",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            print("👹 Auto Boss Farm Started")
+        else
+            print("⏹️ Auto Boss Farm Stopped")
+        end
+    end
+})
+
+-- Teleport Section
+local TeleportSection = MainTab:CreateSection("Teleports")
+
+local IslandDropdown = MainTab:CreateDropdown({
+    Title = "Teleport to Island",
+    Description = "Select an island to teleport to",
+    Options = {
+        "Starter Island",
+        "Jungle",
+        "Pirate Village", 
+        "Desert",
+        "Snow Mountain",
+        "Marine Fortress"
+    },
+    Default = "Select Island",
+    Callback = function(Option)
+        TeleportToIsland(Option)
+    end
+})
+
+-- Player Section
+local PlayerSection = MainTab:CreateSection("Player")
+
+local WalkSpeedSlider = MainTab:CreateSlider({
+    Title = "Walk Speed",
+    Description = "Adjust your movement speed",
+    Default = 16,
+    Min = 16,
+    Max = 100,
+    Callback = function(Value)
+        Humanoid.WalkSpeed = Value
+        print("🚶 Walk Speed: " .. Value)
+    end
+})
+
+local JumpPowerSlider = MainTab:CreateSlider({
+    Title = "Jump Power", 
+    Description = "Adjust your jump height",
+    Default = 50,
+    Min = 50,
+    Max = 150,
+    Callback = function(Value)
+        Humanoid.JumpPower = Value
+        print("🦘 Jump Power: " .. Value)
+    end
+})
+
+-- Combat Tab
+local CombatTab = Window:CreateTab("Combat", "rbxassetid://4483345998")
+
+local AimbotSection = CombatTab:CreateSection("Aimbot")
+
+local AimbotToggle = CombatTab:CreateToggle({
+    Title = "Aimbot (Press Q)",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            InitializeAimbot()
+            print("🎯 Aimbot Enabled - Press Q to use")
+        else
+            print("🎯 Aimbot Disabled")
+        end
+    end
+})
+
+-- Functions
+function FindNearestEnemy()
+    local nearestEnemy = nil
+    local shortestDistance = math.huge
+    
+    -- Check multiple enemy locations
+    local enemyContainers = {
+        Workspace.Enemies,
+        Workspace.LivingThings,
+        Workspace.Mobs
+    }
+    
+    for _, container in pairs(enemyContainers) do
+        if container then
+            for _, enemy in pairs(container:GetChildren()) do
+                if enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 and enemy:FindFirstChild("HumanoidRootPart") then
+                    local distance = (RootPart.Position - enemy.HumanoidRootPart.Position).Magnitude
+                    if distance < shortestDistance and distance < 200 then
+                        shortestDistance = distance
+                        nearestEnemy = enemy
+                    end
+                end
+            end
+        end
+    end
+    
+    return nearestEnemy
+end
+
+function TeleportToIsland(islandName)
+    local islandPositions = {
+        ["Starter Island"] = Vector3.new(-100, 50, 100),
+        ["Jungle"] = Vector3.new(-1500, 100, 500),
+        ["Pirate Village"] = Vector3.new(-1100, 100, 3800),
+        ["Desert"] = Vector3.new(900, 100, 3700),
+        ["Snow Mountain"] = Vector3.new(1200, 300, -1300),
+        ["Marine Fortress"] = Vector3.new(-4500, 200, 3800)
+    }
+    
+    if islandPositions[islandName] then
+        RootPart.CFrame = CFrame.new(islandPositions[islandName])
+        Venus:Notify({
+            Title = "Teleport",
+            Description = "Teleported to " .. islandName,
+            Duration = 3
+        })
+        print("🌊 Teleported to: " .. islandName)
+    end
+end
+
+function InitializeAimbot()
+    RunService.Heartbeat:Connect(function()
+        -- Basic aimbot logic
+        local closestPlayer = GetClosestPlayer()
+        if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            local targetPos = closestPlayer.Character.HumanoidRootPart.Position
+            local camera = Workspace.CurrentCamera
+            camera.CFrame = CFrame.new(camera.CFrame.Position, targetPos)
+        end
+    end)
+end
+
+function GetClosestPlayer()
+    local closestPlayer = nil
+    local shortestDistance = math.huge
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= Player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            local distance = (RootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+            if distance < shortestDistance then
+                shortestDistance = distance
+                closestPlayer = player
+            end
+        end
+    end
+    
+    return closestPlayer
+end
+
+-- Anti-AFK
+local VirtualUser = game:GetService("VirtualUser")
+game:GetService("Players").LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
+print("🎉 Solix Hub Fully Loaded!")
+Venus:Notify({
+    Title = "Solix Hub",
+    Description = "Successfully loaded! Enjoy the features.",
+    Duration = 5
+})
