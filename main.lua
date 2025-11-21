@@ -1,442 +1,598 @@
--- Solix Hub - PROPER WORKING VERSION
-repeat wait() until game:IsLoaded()
+-- Solix Hub - Single-file Sea-Aware Blox Fruits (Executor-safe)
+-- Features: AutoFarm, AutoMelee, AutoQuest, AutoBoss, Teleports, Aimbot, ESP, Anti-AFK
+-- Paste into an executor and run client-side.
 
-print("🎮 Solix Hub - Professional Edition Loading...")
-
-local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
-local TeleportService = game:GetService("TeleportService")
-local Player = Players.LocalPlayer
-
--- Wait for character
-if not Player.Character then
-    Player.CharacterAdded:Wait()
+-- ====== Debug & Safe Helpers ======
+local function safe_pcall(fn, ...)
+    local ok, res = pcall(fn, ...)
+    return ok, res
 end
 
-local Character = Player.Character
-local Humanoid = Character:WaitForChild("Humanoid")
-local RootPart = Character:WaitForChild("HumanoidRootPart")
-
-print("✅ Game loaded successfully")
-
--- Sea Detection
-function GetCurrentSea()
-    local playerLevel = 1
-    if Player:FindFirstChild("Data") and Player.Data:FindFirstChild("Level") then
-        playerLevel = Player.Data.Level.Value
-    end
-    
-    if playerLevel >= 700 and Workspace:FindFirstChild("IceCastle") then
-        return "Second Sea"
-    elseif playerLevel >= 1500 and (Workspace:FindFirstChild("Mansion") or Workspace:FindFirstChild("HauntedCastle")) then
-        return "Third Sea"
-    else
-        return "First Sea"
-    end
+local function try_get_service(name)
+    local ok, s = pcall(function() return game:GetService(name) end)
+    if ok then return s end
+    return nil
 end
 
--- Sea-Specific Data
+local Players = try_get_service("Players")
+local Workspace = try_get_service("Workspace")
+local RunService = try_get_service("RunService")
+local UserInputService = try_get_service("UserInputService")
+local TeleportService = try_get_service("TeleportService")
+local HttpService = try_get_service("HttpService")
+local StarterGui = try_get_service("StarterGui")
+
+if not Players or not Workspace then
+    warn("[Solix] essential services missing - aborting.")
+    return
+end
+
+local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then
+    warn("[Solix] LocalPlayer not found. Make sure this runs client-side.")
+    return
+end
+
+-- Safe identify executor
+local function identify_executor()
+    local ok, id = pcall(function() return identifyexecutor and identifyexecutor() end)
+    if ok and id then return tostring(id) end
+    return "Unknown"
+end
+
+print("[Solix] Starting - Executor:", identify_executor())
+
+-- ====== Config & State ======
+local Config = {
+    Humanizer = true, -- adds small random delays
+    SafeTeleport = true,
+    AutoAFK = true
+}
+local Settings = {
+    AutoFarm = false,
+    AutoMelee = false,
+    AutoQuest = false,
+    AutoBoss = false,
+    AutoHop = false,
+    FruitMastery = false,
+    Aimbot = false,
+    ESP = false,
+    SelectedBoss = "",
+    SelectedIsland = nil
+}
+
+-- Player Character helpers
+local function getCharacter()
+    return LocalPlayer and LocalPlayer.Character
+end
+local function getHumanoid()
+    local c = getCharacter()
+    return c and c:FindFirstChildWhichIsA("Humanoid")
+end
+local function getRoot()
+    local c = getCharacter()
+    return c and c:FindFirstChild("HumanoidRootPart")
+end
+
+-- Wait for initial character
+if not getCharacter() then
+    LocalPlayer.CharacterAdded:Wait()
+end
+
+-- ====== Sea Detection & Data ======
 local IslandData = {
     ["First Sea"] = {
         ["Starter Island"] = Vector3.new(-100, 50, 100),
         ["Jungle"] = Vector3.new(-1500, 100, 500),
         ["Pirate Village"] = Vector3.new(-1100, 100, 3800),
-        ["Desert"] = Vector3.new(900, 100, 3700),
-        ["Snow Mountain"] = Vector3.new(1200, 300, -1300),
-        ["Marine Fortress"] = Vector3.new(-4500, 200, 3800),
-        ["Sky Island"] = Vector3.new(4500, 1500, -1500),
-        ["Prison"] = Vector3.new(5000, 100, 300),
-        ["Magma Village"] = Vector3.new(5500, 100, -800),
-        ["Underwater City"] = Vector3.new(2500, -500, -2500),
-        ["Fountain City"] = Vector3.new(5000, 100, 5000)
     },
     ["Second Sea"] = {
         ["Cafe"] = Vector3.new(-400, 100, 300),
         ["Kingdom of Rose"] = Vector3.new(-1500, 100, 100),
         ["Usoap's Island"] = Vector3.new(-5000, 100, 3000),
         ["Mansion"] = Vector3.new(-12000, 300, 2000),
-        ["Green Zone"] = Vector3.new(-2000, 100, -3000),
-        ["Graveyard"] = Vector3.new(-6000, 100, -7000),
-        ["Snow Mountain"] = Vector3.new(1000, 400, -2000),
-        ["Hot Island"] = Vector3.new(-5000, 100, -4000),
-        ["Cold Island"] = Vector3.new(-5000, 100, -1000),
         ["Ice Castle"] = Vector3.new(6000, 200, -6000)
     },
     ["Third Sea"] = {
         ["Port Town"] = Vector3.new(-600, 100, 5000),
-        ["Hydra Island"] = Vector3.new(5000, 100, 4000),
-        ["Great Tree"] = Vector3.new(2000, 500, 3000),
-        ["Castle on the Sea"] = Vector3.new(-5000, 100, 2000),
-        ["Floating Turtle"] = Vector3.new(10000, 3000, 1000),
-        ["Haunted Castle"] = Vector3.new(-10000, 100, 5000),
-        ["Ice Cream Island"] = Vector3.new(-800, 100, -10000),
-        ["Peanut Island"] = Vector3.new(-2000, 100, -5000),
-        ["Cake Island"] = Vector3.new(-4000, 100, -7000)
+        ["Hydra Island"] = Vector3.new(5000, 100, 4000)
     }
 }
 
--- Load FluxUI - Professional and Reliable
-local Flux = loadstring(game:HttpGet"https://raw.githubusercontent.com/Robobo2022/script/main/FluxLib.lua")()
-
--- Create Window
-local Window = Flux:Window("Solix Hub", "Blox Fruits - Professional", "By YourName", true)
-
--- Settings
-local Settings = {
-    AutoFarm = false,
-    AutoMelee = false,
-    FruitMastery = false,
-    AutoBoss = false,
-    SelectedBoss = "",
-    AutoHop = false,
-    Aimbot = false,
-    ESP = false
+local BossData = {
+    ["First Sea"] = {"Greybeard", "Saber Expert", "Dark Beard", "Warden"},
+    ["Second Sea"] = {"Ice Admiral", "Beautiful Pirate", "Cake Queen"},
+    ["Third Sea"] = {"Cake Prince", "Dough King"}
 }
 
--- Main Tab
-local MainTab = Window:Tab("Main", "http://www.roblox.com/asset/?id=6023426915")
-
-MainTab:Section("Auto Farming")
-
-local FarmToggle = MainTab:Toggle("Auto Farm Enemies", "Start auto farming nearby enemies", false, function(t)
-    Settings.AutoFarm = t
-    if t then
-        StartAutoFarm()
-        Flux:Notification("Auto Farm", "Auto farming started!", "OK")
-    else
-        Flux:Notification("Auto Farm", "Auto farming stopped!", "OK")
+local function GetPlayerLevel()
+    local lvl = 1
+    if LocalPlayer:FindFirstChild("Data") and LocalPlayer.Data:FindFirstChild("Level") then
+        local ok, v = pcall(function() return LocalPlayer.Data.Level.Value end)
+        if ok and type(v) == "number" then lvl = v end
     end
-end)
-
-local MeleeToggle = MainTab:Toggle("Auto Melee Attack", "Automatically use melee attacks", false, function(t)
-    Settings.AutoMelee = t
-end)
-
-local FruitToggle = MainTab:Toggle("Fruit Mastery Farm", "Use fruit skills for mastery", false, function(t)
-    Settings.FruitMastery = t
-end)
-
-MainTab:Section("Boss Farming")
-
-local Bosses = {"Greybeard", "Saber Expert", "Dark Beard", "Warden", "Ice Admiral", "Cake Queen"}
-local BossDropdown = MainTab:Dropdown("Select Boss", "Choose boss to farm", Bosses, function(selected)
-    Settings.SelectedBoss = selected
-end)
-
-local BossToggle = MainTab:Toggle("Auto Boss Farm", "Farm selected boss automatically", false, function(t)
-    Settings.AutoBoss = t
-    if t and Settings.SelectedBoss ~= "" then
-        StartBossFarm()
-        Flux:Notification("Boss Farm", "Started farming: " .. Settings.SelectedBoss, "OK")
-    elseif t then
-        Flux:Notification("Error", "Please select a boss first!", "OK")
-        Settings.AutoBoss = false
-    end
-end)
-
-local HopToggle = MainTab:Toggle("Auto Server Hop", "Hop if boss not found", false, function(t)
-    Settings.AutoHop = t
-end)
-
--- Combat Tab
-local CombatTab = Window:Tab("Combat", "http://www.roblox.com/asset/?id=6023426915")
-
-CombatTab:Section("Aimbot & ESP")
-
-local AimbotToggle = CombatTab:Toggle("Aimbot (Hold RightClick)", "Lock onto players", false, function(t)
-    Settings.Aimbot = t
-    if t then
-        StartAimbot()
-        Flux:Notification("Aimbot", "Aimbot enabled - Hold RightClick", "OK")
-    end
-end)
-
-local ESPToggle = CombatTab:Toggle("Player ESP", "Highlight other players", false, function(t)
-    Settings.ESP = t
-    if t then
-        StartESP()
-        Flux:Notification("ESP", "Player ESP enabled", "OK")
-    else
-        ClearESP()
-    end
-end)
-
--- Teleport Tab
-local TeleportTab = Window:Tab("Teleport", "http://www.roblox.com/asset/?id=6023426915")
-
-TeleportTab:Section("Island Teleports")
-
--- Create teleport buttons for current sea only
-local currentSea = GetCurrentSea()
-Flux:Notification("Sea Detection", "Detected: " .. currentSea, "OK")
-
-for islandName, position in pairs(IslandData[currentSea]) do
-    TeleportTab:Button("Teleport to " .. islandName, "Teleport to " .. islandName, function()
-        TeleportToIsland(islandName, position)
-    end)
+    return lvl
 end
 
--- Player Tab
-local PlayerTab = Window:Tab("Player", "http://www.roblox.com/asset/?id=6023426915")
+local function GetCurrentSea()
+    local lvl = GetPlayerLevel()
+    -- robust environment checks
+    if lvl >= 1500 and (Workspace:FindFirstChild("Mansion") or Workspace:FindFirstChild("HauntedCastle")) then
+        return "Third Sea"
+    elseif lvl >= 700 and (Workspace:FindFirstChild("IceCastle") or Workspace:FindFirstChild("Mansion")) then
+        return "Second Sea"
+    else
+        return "First Sea"
+    end
+end
 
-PlayerTab:Section("Movement")
+-- ====== Utility: Safe VirtualInput usage ======
+local VirtualInputManager = nil
+local vim_ok = pcall(function() VirtualInputManager = game:GetService("VirtualInputManager") end)
+local function safe_send_key(key)
+    if VirtualInputManager then
+        pcall(function()
+            VirtualInputManager:SendKeyEvent(true, key, false, game)
+            wait(0.05)
+            VirtualInputManager:SendKeyEvent(false, key, false, game)
+        end)
+    else
+        -- fallback: attempt to fire UserInputService (may not work)
+        pcall(function()
+            UserInputService.InputBegan:Wait()
+        end)
+    end
+end
 
-local WalkSpeedSlider = PlayerTab:Slider("Walk Speed", "Adjust movement speed", 16, 100, 16, function(value)
-    Humanoid.WalkSpeed = value
-end)
+-- ====== Anti AFK ======
+do
+    local VirtualUser = try_get_service("VirtualUser")
+    if VirtualUser and Config.AutoAFK then
+        pcall(function()
+            LocalPlayer.Idled:Connect(function()
+                pcall(function()
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton2(Vector2.new(0,0))
+                    print("[Solix] Anti-AFK triggered")
+                end)
+            end)
+        end)
+    end
+end
 
-local JumpPowerSlider = PlayerTab:Slider("Jump Power", "Adjust jump height", 50, 200, 50, function(value)
-    Humanoid.JumpPower = value
-end)
-
--- FUNCTIONS THAT ACTUALLY WORK
-
-function FindNearestEnemy()
-    local nearestEnemy = nil
-    local shortestDistance = math.huge
-    
-    -- Check all possible enemy containers
-    local enemyContainers = {
-        Workspace.Enemies,
-        Workspace.LivingThings,
-        Workspace.Mobs,
-        Workspace._DESPAWNED
+-- ====== Combat & Farming Functions ======
+local function FindNearestEnemy(maxDistance)
+    maxDistance = maxDistance or 500
+    local root = getRoot()
+    if not root then return nil end
+    local candidate = nil
+    local best = math.huge
+    local containers = {
+        Workspace:FindFirstChild("Enemies"),
+        Workspace:FindFirstChild("_ENEMIES"),
+        Workspace:FindFirstChild("Mobs"),
+        Workspace:FindFirstChild("LivingThings"),
+        Workspace:FindFirstChild("_DESPAWNED")
     }
-    
-    for _, container in pairs(enemyContainers) do
-        if container then
-            for _, enemy in pairs(container:GetChildren()) do
-                if enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 and enemy:FindFirstChild("HumanoidRootPart") then
-                    local distance = (RootPart.Position - enemy.HumanoidRootPart.Position).Magnitude
-                    if distance < shortestDistance and distance < 500 then
-                        shortestDistance = distance
-                        nearestEnemy = enemy
+    for _, cont in pairs(containers) do
+        if cont then
+            for _, v in pairs(cont:GetChildren()) do
+                local hrp = v:FindFirstChild("HumanoidRootPart")
+                local hum = v:FindFirstChildWhichIsA("Humanoid")
+                if hrp and hum and hum.Health > 0 then
+                    local d = (root.Position - hrp.Position).Magnitude
+                    if d < best and d <= maxDistance then
+                        best = d
+                        candidate = v
                     end
                 end
             end
         end
     end
-    
-    return nearestEnemy
+    return candidate
 end
 
-function StartAutoFarm()
-    spawn(function()
-        while Settings.AutoFarm do
-            local enemy = FindNearestEnemy()
-            if enemy and enemy:FindFirstChild("HumanoidRootPart") then
-                -- Teleport to enemy
-                RootPart.CFrame = enemy.HumanoidRootPart.CFrame * CFrame.new(0, 0, 8)
-                
-                -- Auto attack
-                if Settings.AutoMelee then
-                    VirtualInputManager:SendKeyEvent(true, "X", false, game)
-                    wait(0.1)
-                    VirtualInputManager:SendKeyEvent(false, "X", false, game)
-                end
-                
-                -- Fruit skills
-                if Settings.FruitMastery then
-                    UseFruitSkills()
-                end
-            else
-                -- No enemies found, wait a bit
-                wait(1)
-            end
-            wait(0.2)
-        end
-    end)
-end
-
-function StartBossFarm()
-    spawn(function()
-        while Settings.AutoBoss and Settings.SelectedBoss ~= "" do
-            local boss = FindBoss(Settings.SelectedBoss)
-            if boss and boss:FindFirstChild("HumanoidRootPart") then
-                -- Teleport to boss
-                RootPart.CFrame = boss.HumanoidRootPart.CFrame * CFrame.new(0, 0, 12)
-                
-                -- Attack boss
-                VirtualInputManager:SendKeyEvent(true, "X", false, game)
-                wait(0.2)
-                VirtualInputManager:SendKeyEvent(false, "X", false, game)
-                
-                -- Use fruit skills
-                if Settings.FruitMastery then
-                    UseFruitSkills()
-                end
-            elseif Settings.AutoHop then
-                -- Boss not found, server hop
-                ServerHop()
-                break
-            else
-                wait(2)
-            end
-            wait(0.3)
-        end
-    end)
-end
-
-function FindBoss(bossName)
-    -- Check regular bosses
-    for _, boss in pairs(Workspace:GetChildren()) do
-        if string.find(string.lower(boss.Name), string.lower(bossName)) and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
-            return boss
-        end
+local function UseFruitSkills()
+    -- attempt to press keys for fruit skills safely
+    for _, k in ipairs({"Z","X","C","V","F"}) do
+        safe_pcall(function() safe_send_key(k) end)
+        wait(0.15 + (Config.Humanizer and math.random() * 0.1 or 0))
     end
-    
-    -- Check in enemy containers
-    local containers = {Workspace.Enemies, Workspace.LivingThings, Workspace.Mobs}
-    for _, container in pairs(containers) do
-        if container then
-            for _, boss in pairs(container:GetChildren()) do
-                if string.find(string.lower(boss.Name), string.lower(bossName)) and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
-                    return boss
-                end
+end
+
+local function AttackMelee()
+    safe_pcall(function() safe_send_key("X") end)
+end
+
+-- Teleport helper (safe)
+local function SafeTeleportTo(pos)
+    local root = getRoot()
+    if not root then return false end
+    pcall(function() root.CFrame = CFrame.new(pos + Vector3.new(0,3,0)) end)
+    return true
+end
+
+-- Teleport to island by name in current sea
+local function TeleportToIsland(islandName)
+    local sea = GetCurrentSea()
+    local islands = IslandData[sea] or {}
+    if islands[islandName] then
+        SafeTeleportTo(islands[islandName])
+        print("[Solix] Teleported to", islandName, "in", sea)
+        return true
+    else
+        warn("[Solix] Island not found in", sea, ":", islandName)
+        return false
+    end
+end
+
+-- Boss finder (simple string match)
+local function FindBossByName(name)
+    -- search workspace children and enemy containers
+    for _, v in pairs(Workspace:GetDescendants()) do
+        if v:IsA("Model") and v:FindFirstChildWhichIsA("Humanoid") then
+            if string.find(string.lower(v.Name), string.lower(name)) then
+                return v
             end
         end
     end
-    
     return nil
 end
 
-function UseFruitSkills()
-    local skills = {"Z", "X", "C", "V", "F"}
-    for _, key in pairs(skills) do
-        VirtualInputManager:SendKeyEvent(true, key, false, game)
-        wait(0.15)
-        VirtualInputManager:SendKeyEvent(false, key, false, game)
-        wait(0.5)
-    end
+-- ====== Background Loops (controlled by Settings) ======
+local loops = {}
+
+local function StartAutoFarmLoop()
+    if loops.autofarm then return end
+    loops.autofarm = true
+    spawn(function()
+        while Settings.AutoFarm do
+            local root = getRoot()
+            if root then
+                local enemy = FindNearestEnemy(500)
+                if enemy and enemy:FindFirstChild("HumanoidRootPart") then
+                    -- approach
+                    pcall(function()
+                        root.CFrame = enemy.HumanoidRootPart.CFrame * CFrame.new(0,0,8)
+                    end)
+                    if Settings.AutoMelee then AttackMelee() end
+                    if Settings.FruitMastery then UseFruitSkills() end
+                else
+                    -- try auto quest: teleport to quest area (very basic)
+                    if Settings.AutoQuest then
+                        local sea = GetCurrentSea()
+                        -- pick a random island within sea as "quest area"
+                        local islands = IslandData[sea]
+                        if islands then
+                            for n,pos in pairs(islands) do
+                                SafeTeleportTo(pos)
+                                break
+                            end
+                        end
+                    end
+                    wait(1.2)
+                end
+            end
+            wait(0.25 + (Config.Humanizer and math.random()*0.2 or 0))
+        end
+        loops.autofarm = nil
+    end)
 end
 
-function StartAimbot()
-    RunService.Heartbeat:Connect(function()
-        if Settings.Aimbot and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-            local closestPlayer = GetClosestPlayer()
-            if closestPlayer and closestPlayer.Character and closestPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                local targetPos = closestPlayer.Character.HumanoidRootPart.Position
-                local camera = Workspace.CurrentCamera
-                camera.CFrame = CFrame.new(camera.CFrame.Position, targetPos)
+local function StartBossFarmLoop()
+    if loops.bossfarm then return end
+    loops.bossfarm = true
+    spawn(function()
+        while Settings.AutoBoss do
+            local boss = nil
+            if Settings.SelectedBoss ~= "" then
+                boss = FindBossByName(Settings.SelectedBoss)
+            else
+                -- pick first BossData entry of current sea
+                local sea = GetCurrentSea()
+                local b = BossData[sea]
+                if b and #b > 0 then
+                    Settings.SelectedBoss = b[1]
+                end
+            end
+            if boss and boss:FindFirstChild("HumanoidRootPart") then
+                local root = getRoot()
+                pcall(function()
+                    if root then root.CFrame = boss.HumanoidRootPart.CFrame * CFrame.new(0,0,12) end
+                end)
+                -- attack
+                AttackMelee()
+                if Settings.FruitMastery then UseFruitSkills() end
+            else
+                if Settings.AutoHop then
+                    -- best-effort server hop using Roblox public API (may be rate limited)
+                    pcall(function()
+                        local ok, data = pcall(function()
+                            return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Desc&limit=100"))
+                        end)
+                        if ok and data and data.data then
+                            local ids = {}
+                            for _,sv in pairs(data.data) do
+                                if sv.id ~= game.JobId and sv.playing < sv.maxPlayers then
+                                    table.insert(ids, sv.id)
+                                end
+                            end
+                            if #ids > 0 then
+                                TeleportService:TeleportToPlaceInstance(game.PlaceId, ids[math.random(1,#ids)])
+                                break
+                            end
+                        end
+                    end)
+                else
+                    wait(2)
+                end
+            end
+            wait(0.4)
+        end
+        loops.bossfarm = nil
+    end)
+end
+
+-- ====== Aimbot & ESP ======
+local aimbot_conn = nil
+local esp_added = {}
+
+local function StartAimbot()
+    if aimbot_conn then return end
+    aimbot_conn = RunService.Heartbeat:Connect(function()
+        if not Settings.Aimbot then return end
+        if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+            local closest = nil
+            local best = math.huge
+            local root = getRoot()
+            if root then
+                for _,pl in pairs(Players:GetPlayers()) do
+                    if pl ~= LocalPlayer and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then
+                        local d = (root.Position - pl.Character.HumanoidRootPart.Position).Magnitude
+                        if d < best then best = d; closest = pl end
+                    end
+                end
+                if closest and closest.Character and closest.Character:FindFirstChild("HumanoidRootPart") then
+                    local cam = Workspace.CurrentCamera
+                    pcall(function()
+                        cam.CFrame = CFrame.new(cam.CFrame.Position, closest.Character.HumanoidRootPart.Position)
+                    end)
+                end
             end
         end
     end)
 end
 
-function GetClosestPlayer()
-    local closestPlayer = nil
-    local shortestDistance = math.huge
-    
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= Player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            local distance = (RootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
-            if distance < shortestDistance then
-                shortestDistance = distance
-                closestPlayer = player
+local function StartESP()
+    if Settings.ESP then
+        for _,pl in pairs(Players:GetPlayers()) do
+            if pl ~= LocalPlayer and pl.Character and not esp_added[pl] then
+                local ok, highlight = pcall(function()
+                    local h = Instance.new("Highlight")
+                    h.Name = "SolixHighlight"
+                    h.Parent = pl.Character
+                    h.Adornee = pl.Character:FindFirstChildWhichIsA("Model") or pl.Character
+                    return h
+                end)
+                if ok then esp_added[pl] = true end
             end
         end
-    end
-    
-    return closestPlayer
-end
-
-function StartESP()
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= Player and player.Character then
-            local highlight = Instance.new("Highlight")
-            highlight.Name = "SolixESP"
-            highlight.FillColor = Color3.fromRGB(255, 0, 0)
-            highlight.FillTransparency = 0.5
-            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-            highlight.OutlineTransparency = 0
-            highlight.Parent = player.Character
-        end
-    end
-    
-    -- Add ESP for new players
-    Players.PlayerAdded:Connect(function(player)
-        player.CharacterAdded:Connect(function(character)
-            if Settings.ESP then
-                wait(1)
-                local highlight = Instance.new("Highlight")
-                highlight.Name = "SolixESP"
-                highlight.FillColor = Color3.fromRGB(255, 0, 0)
-                highlight.FillTransparency = 0.5
-                highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-                highlight.OutlineTransparency = 0
-                highlight.Parent = character
-            end
+        -- connect new players
+        Players.PlayerAdded:Connect(function(pl)
+            pl.CharacterAdded:Connect(function(c)
+                if Settings.ESP then
+                    pcall(function()
+                        local h = Instance.new("Highlight")
+                        h.Name = "SolixHighlight"
+                        h.Parent = c
+                        esp_added[pl] = true
+                    end)
+                end
+            end)
         end)
-    end)
-end
-
-function ClearESP()
-    for _, player in pairs(Players:GetPlayers()) do
-        if player.Character then
-            local esp = player.Character:FindFirstChild("SolixESP")
-            if esp then
-                esp:Destroy()
-            end
-        end
-    end
-end
-
-function TeleportToIsland(islandName, position)
-    local currentSea = GetCurrentSea()
-    if IslandData[currentSea][islandName] then
-        RootPart.CFrame = CFrame.new(position)
-        Flux:Notification("Teleport", "Teleported to " .. islandName .. " in " .. currentSea, "OK")
-        print("🌊 Teleported to: " .. islandName)
     else
-        Flux:Notification("Error", "Island not available in current sea!", "OK")
-    end
-end
-
-function ServerHop()
-    local servers = {}
-    local success, result = pcall(function()
-        return game:GetService("HttpService"):JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"))
-    end)
-    
-    if success and result.data then
-        for _, server in pairs(result.data) do
-            if server.playing < server.maxPlayers and server.id ~= game.JobId then
-                table.insert(servers, server.id)
+        -- Clear existing highlights
+        for _,pl in pairs(Players:GetPlayers()) do
+            if pl.Character then
+                for _,c in pairs(pl.Character:GetChildren()) do
+                    if c:IsA("Highlight") and c.Name == "SolixHighlight" then
+                        pcall(function() c:Destroy() end)
+                    end
+                end
             end
         end
-        
-        if #servers > 0 then
-            Flux:Notification("Server Hop", "Moving to new server...", "OK")
-            TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)])
-        end
+        esp_added = {}
     end
 end
 
--- Anti-AFK
-local VirtualUser = game:GetService("VirtualUser")
-game:GetService("Players").LocalPlayer.Idled:Connect(function()
-    VirtualUser:CaptureController()
-    VirtualUser:ClickButton2(Vector2.new())
-end)
+-- ====== Simple Fallback GUI ======
+local function CreateMainUI()
+    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui") or Instance.new("ScreenGui", LocalPlayer:WaitForChild("PlayerGui"))
+    -- check existing
+    local existing = playerGui:FindFirstChild("SolixHubUI")
+    if existing then existing:Destroy() end
 
-print("🎉 Solix Hub - Professional Edition Loaded!")
-print("🌊 Current Sea: " .. GetCurrentSea())
-print("✅ All features should work properly now!")
+    local screen = Instance.new("ScreenGui")
+    screen.Name = "SolixHubUI"
+    screen.ResetOnSpawn = false
+    screen.Parent = playerGui
 
--- Auto-refresh teleports if sea changes
-spawn(function()
-    local lastSea = GetCurrentSea()
-    while true do
-        wait(10)
-        local currentSea = GetCurrentSea()
-        if currentSea ~= lastSea then
-            lastSea = currentSea
-            Flux:Notification("Sea Changed", "Now in " .. currentSea, "OK")
-            print("🌊 Sea changed to: " .. currentSea)
+    local main = Instance.new("Frame", screen)
+    main.AnchorPoint = Vector2.new(0,0)
+    main.Position = UDim2.new(0,0,0,60)
+    main.Size = UDim2.new(0,380,0,420)
+    main.BackgroundTransparency = 0.15
+    main.BackgroundColor3 = Color3.fromRGB(20,20,28)
+    main.BorderSizePixel = 0
+    main.Name = "Main"
+
+    local title = Instance.new("TextLabel", main)
+    title.Size = UDim2.new(1,0,0,36)
+    title.Position = UDim2.new(0,0,0,0)
+    title.BackgroundTransparency = 1
+    title.Text = "Solix Hub — Blox Fruits (Sea-aware)"
+    title.TextScaled = true
+    title.TextColor3 = Color3.fromRGB(255,255,255)
+
+    local function makeToggle(y, text, initial, cb)
+        local frame = Instance.new("Frame", main)
+        frame.Position = UDim2.new(0,8,0,y)
+        frame.Size = UDim2.new(1,-16,0,34)
+        frame.BackgroundTransparency = 1
+        local lbl = Instance.new("TextLabel", frame)
+        lbl.Size = UDim2.new(0.68,0,1,0)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = text
+        lbl.TextColor3 = Color3.fromRGB(230,230,230)
+        lbl.TextScaled = false
+        lbl.Font = Enum.Font.SourceSans
+        lbl.TextSize = 16
+
+        local btn = Instance.new("TextButton", frame)
+        btn.Size = UDim2.new(0.28,0,0.8,0)
+        btn.Position = UDim2.new(0.7,0,0.1,0)
+        btn.Text = initial and "On" or "Off"
+        btn.TextScaled = true
+        btn.BackgroundColor3 = initial and Color3.fromRGB(30,150,80) or Color3.fromRGB(120,120,120)
+        btn.TextColor3 = Color3.fromRGB(255,255,255)
+        btn.MouseButton1Click:Connect(function()
+            local new = not (btn.Text == "On")
+            btn.Text = new and "On" or "Off"
+            btn.BackgroundColor3 = new and Color3.fromRGB(30,150,80) or Color3.fromRGB(120,120,120)
+            pcall(cb, new)
+        end)
+        return frame, btn
+    end
+
+    local ypos = 46
+    local tf1 = makeToggle(ypos, "Auto Farm", Settings.AutoFarm, function(v)
+        Settings.AutoFarm = v
+        if v then StartAutoFarmLoop() else Settings.AutoFarm = false end
+    end)
+    ypos = ypos + 40
+    local tf2 = makeToggle(ypos, "Auto Melee", Settings.AutoMelee, function(v) Settings.AutoMelee = v end)
+    ypos = ypos + 40
+    local tf3 = makeToggle(ypos, "Auto Quest", Settings.AutoQuest, function(v) Settings.AutoQuest = v end)
+    ypos = ypos + 40
+    local tf4 = makeToggle(ypos, "Auto Boss", Settings.AutoBoss, function(v)
+        Settings.AutoBoss = v
+        if v then StartBossFarmLoop() end
+    end)
+    ypos = ypos + 40
+    local tf5 = makeToggle(ypos, "Aimbot (Hold RMB)", Settings.Aimbot, function(v)
+        Settings.Aimbot = v
+        if v then StartAimbot() end
+    end)
+    ypos = ypos + 40
+    local tf6 = makeToggle(ypos, "ESP", Settings.ESP, function(v)
+        Settings.ESP = v
+        StartESP()
+    end)
+
+    -- Boss dropdown
+    local seaLabel = Instance.new("TextLabel", main)
+    seaLabel.Size = UDim2.new(1,-16,0,22)
+    seaLabel.Position = UDim2.new(0,8,0, ypos + 14)
+    seaLabel.BackgroundTransparency = 1
+    seaLabel.Text = "Detected Sea: " .. GetCurrentSea()
+    seaLabel.TextColor3 = Color3.fromRGB(200,200,200)
+    seaLabel.TextXAlignment = Enum.TextXAlignment.Left
+    ypos = ypos + 40
+
+    local bossDropdown = Instance.new("TextButton", main)
+    bossDropdown.Size = UDim2.new(1,-16,0,28)
+    bossDropdown.Position = UDim2.new(0,8,0,ypos+40)
+    bossDropdown.Text = "Select Boss"
+    bossDropdown.TextColor3 = Color3.fromRGB(255,255,255)
+    bossDropdown.BackgroundColor3 = Color3.fromRGB(40,40,50)
+    bossDropdown.MouseButton1Click:Connect(function()
+        -- build simple selection menu
+        local sea = GetCurrentSea()
+        local list = BossData[sea] or {}
+        local menu = Instance.new("Frame", main)
+        menu.Size = UDim2.new(1,-16,0, #list * 28)
+        menu.Position = UDim2.new(0,8,0,ypos+72)
+        menu.BackgroundColor3 = Color3.fromRGB(30,30,38)
+        for i,name in ipairs(list) do
+            local b = Instance.new("TextButton", menu)
+            b.Size = UDim2.new(1, -4, 0, 24)
+            b.Position = UDim2.new(0,2,0,(i-1)*28)
+            b.Text = name
+            b.BackgroundColor3 = Color3.fromRGB(60,60,70)
+            b.TextColor3 = Color3.fromRGB(255,255,255)
+            b.MouseButton1Click:Connect(function()
+                Settings.SelectedBoss = name
+                bossDropdown.Text = "Boss: "..name
+                menu:Destroy()
+            end)
         end
+        -- auto-destroy after 6s
+        delay(6, function() if menu and menu.Parent then pcall(function() menu:Destroy() end) end end)
+    end)
+
+    -- Teleport buttons area
+    local teleLabel = Instance.new("TextLabel", main)
+    teleLabel.Size = UDim2.new(1,-16,0,20)
+    teleLabel.Position = UDim2.new(0,8,0, 320)
+    teleLabel.BackgroundTransparency = 1
+    teleLabel.Text = "Teleports (current sea):"
+    teleLabel.TextColor3 = Color3.fromRGB(220,220,220)
+    teleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+    local tpContainer = Instance.new("Frame", main)
+    tpContainer.Position = UDim2.new(0,8,0, 345)
+    tpContainer.Size = UDim2.new(1,-16,0,64)
+    tpContainer.BackgroundTransparency = 1
+
+    -- populate teleport buttons
+    spawn(function()
+        local sea = GetCurrentSea()
+        local islands = IslandData[sea] or {}
+        local i = 0
+        for name,pos in pairs(islands) do
+            local b = Instance.new("TextButton", tpContainer)
+            b.Size = UDim2.new(0.5, -6, 0, 28)
+            b.Position = UDim2.new((i%2)*0.5 + 0.01, 0, math.floor(i/2)*0.5, 0)
+            b.Text = name
+            b.AutomaticSize = Enum.AutomaticSize.None
+            b.BackgroundColor3 = Color3.fromRGB(50,50,60)
+            b.TextColor3 = Color3.fromRGB(255,255,255)
+            b.MouseButton1Click:Connect(function()
+                Settings.SelectedIsland = name
+                TeleportToIsland(name)
+            end)
+            i = i + 1
+        end
+    end)
+
+    -- small footer
+    local footer = Instance.new("TextLabel", main)
+    footer.Size = UDim2.new(1,0,0,20)
+    footer.Position = UDim2.new(0,0,1,-20)
+    footer.BackgroundTransparency = 1
+    footer.Text = "Solix Hub — Basic Edition | Sea: " .. GetCurrentSea()
+    footer.TextScaled = false
+    footer.TextColor3 = Color3.fromRGB(170,170,170)
+end
+
+-- Create UI
+CreateMainUI()
+
+-- Toggle watchers and safety: connect toggles to functions
+-- A simple monitor loop to start features when toggles are changed (ensures toggles from UI start loops)
+spawn(function()
+    while true do
+        if Settings.AutoFarm and not loops.autofarm then
+            StartAutoFarmLoop()
+        end
+        if Settings.AutoBoss and not loops.bossfarm then
+            StartBossFarmLoop()
+        end
+        if Settings.Aimbot then StartAimbot() end
+        wait(1)
     end
 end)
+
+-- Final prints
+print("[Solix] UI created. Current Sea:", GetCurrentSea())
+print("[Solix] Available features: AutoFarm, AutoMelee, AutoQuest, AutoBoss, Teleports, Aimbot, ESP, Anti-AFK")
